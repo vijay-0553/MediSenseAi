@@ -1,0 +1,33 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Environment configurations
+.env
+.env.local
+*.env
+
+# Backend storage and temporary data
+backend/storage/
+backend/temp/
+uploads/
+*.db
+*.sqlite3
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Frontend build outputs
+dist/
+build/
+.cache/
+

@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+venv
+ENV
+.pytest_cache
+*.log
+medisense.db-journal
+scratch/
+temp/
+tests/

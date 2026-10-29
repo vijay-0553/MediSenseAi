@@ -1,0 +1,14 @@
+{
+  "title": "MediSenseAi",
+  "description": "MediSense AI - Multi-Module Medical Radiograph Analysis Platform",
+  "icons": {
+    "icon": "/DOCTOR_LOGO.png"
+  },
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
