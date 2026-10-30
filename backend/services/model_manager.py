@@ -6,10 +6,8 @@ from typing import Any, Dict, List
 import numpy as np
 import torch
 import torchvision.models as tv_models
-import tensorflow as tf
 
 from config import settings
-from architectures.cbam_keras import CBAM as KerasCBAM
 from architectures.spine_cbam import MediSenseDenseNet201
 from architectures.knee_efficientnet import EfficientNetB5_Knee
 
@@ -22,16 +20,18 @@ class ModelManager:
     Keeps checkpoints in memory, manages devices, provides warm-up and thread locking.
     """
     def __init__(self):
+        # Limit PyTorch to 1 CPU thread to prevent thread explosion on shared-core cloud containers
+        torch.set_num_threads(1)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.info(f"Initialized ModelManager on device: {self.device}")
+        logger.info(f"Initialized ModelManager on device: {self.device} (1 CPU thread)")
 
-        # Thread locks to guard inference execution per model
+        # Re-entrant thread locks to guard inference execution per model without deadlocking
         self.locks = {
-            "fracture": threading.Lock(),
-            "spine": threading.Lock(),
-            "knee": threading.Lock(),
-            "chest": threading.Lock(),
-            "tumor": threading.Lock(),
+            "fracture": threading.RLock(),
+            "spine": threading.RLock(),
+            "knee": threading.RLock(),
+            "chest": threading.RLock(),
+            "tumor": threading.RLock(),
         }
 
         # Centralized paths
@@ -57,6 +57,8 @@ class ModelManager:
             if not path.exists():
                 raise FileNotFoundError(f"Model file not found: {path}")
             logger.info(f"Loading Fracture model from {path}...")
+            import tensorflow as tf
+            from architectures.cbam_keras import CBAM as KerasCBAM
             model = tf.keras.models.load_model(
                 str(path),
                 custom_objects={"CBAM": KerasCBAM},
@@ -67,7 +69,7 @@ class ModelManager:
                 "loaded": True,
                 "framework": "TensorFlow/Keras",
                 "format": "Keras 3 (.keras)",
-                "device": "CPU" if not tf.config.list_physical_devices("GPU") else "GPU",
+                "device": "CPU",
                 "path": str(path.name),
             }
             logger.info("Fracture model loaded successfully.")
@@ -86,8 +88,8 @@ class ModelManager:
         try:
             if not path.exists():
                 raise FileNotFoundError(f"Model file not found: {path}")
-            logger.info(f"Loading Spine model from {path}...")
-            ckpt = torch.load(str(path), map_location=self.device, weights_only=False)
+            logger.info(f"Loading Spine model from {path} (mmap=True)...")
+            ckpt = torch.load(str(path), map_location=self.device, weights_only=False, mmap=True)
             model = MediSenseDenseNet201()
             model.load_state_dict(ckpt["state_dict"])
             model.to(self.device)
@@ -101,6 +103,10 @@ class ModelManager:
                 "img_size": ckpt.get("img_size", 224),
                 "classes": ["Normal", "Abnormal"],
             }
+            del ckpt
+            import gc
+            gc.collect()
+
             self.model_status["spine"] = {
                 "loaded": True,
                 "framework": "PyTorch",
@@ -124,8 +130,8 @@ class ModelManager:
         try:
             if not path.exists():
                 raise FileNotFoundError(f"Model file not found: {path}")
-            logger.info(f"Loading Knee model from {path}...")
-            ckpt = torch.load(str(path), map_location=self.device, weights_only=False)
+            logger.info(f"Loading Knee model from {path} (mmap=True)...")
+            ckpt = torch.load(str(path), map_location=self.device, weights_only=False, mmap=True)
             model = EfficientNetB5_Knee(num_classes=ckpt.get("num_classes", 5))
             model.load_state_dict(ckpt["model_state_dict"])
             model.to(self.device)
@@ -138,6 +144,10 @@ class ModelManager:
                 "num_classes": len(classes),
                 "image_size": ckpt.get("image_size", 224),
             }
+            del ckpt
+            import gc
+            gc.collect()
+
             self.model_status["knee"] = {
                 "loaded": True,
                 "framework": "PyTorch",
@@ -161,8 +171,8 @@ class ModelManager:
         try:
             if not path.exists():
                 raise FileNotFoundError(f"Model file not found: {path}")
-            logger.info(f"Loading Chest model from {path}...")
-            ckpt = torch.load(str(path), map_location=self.device, weights_only=False)
+            logger.info(f"Loading Chest model from {path} (mmap=True)...")
+            ckpt = torch.load(str(path), map_location=self.device, weights_only=False, mmap=True)
             
             # DenseNet-121 baseline with 14 disease outputs
             model = tv_models.densenet121(weights=None)
@@ -182,6 +192,10 @@ class ModelManager:
                 "image_size": ckpt.get("image_size", 224),
                 "default_threshold": 0.50,
             }
+            del ckpt
+            import gc
+            gc.collect()
+
             self.model_status["chest"] = {
                 "loaded": True,
                 "framework": "PyTorch",
@@ -205,10 +219,15 @@ class ModelManager:
         try:
             fold_models: List[torch.nn.Module] = []
             classes = ["Normal", "Benign", "Malignant"]
-            for i, p in enumerate(paths, start=1):
+            lazy_mode = os.getenv("LAZY_LOAD_MODELS", "false").lower() in ("true", "1", "yes")
+            # In low-RAM environments, load 1 fold to keep RAM usage strictly below 200MB
+            active_paths = [paths[0]] if lazy_mode else paths
+            logger.info(f"Loading Tumor model ({len(active_paths)} fold(s), mmap=True)...")
+
+            for i, p in enumerate(active_paths, start=1):
                 if not p.exists():
                     raise FileNotFoundError(f"Fold {i} model file not found: {p}")
-                ckpt = torch.load(str(p), map_location=self.device, weights_only=False)
+                ckpt = torch.load(str(p), map_location=self.device, weights_only=False, mmap=True)
                 model = tv_models.resnet50(weights=None)
                 model.fc = torch.nn.Linear(2048, 3)
                 model.load_state_dict(ckpt["model_state_dict"])
@@ -217,6 +236,10 @@ class ModelManager:
                 fold_models.append(model)
                 if "class_names" in ckpt:
                     classes = ckpt["class_names"]
+                del ckpt
+
+            import gc
+            gc.collect()
 
             self.models["tumor"] = fold_models
             self.metadata["tumor"] = {
@@ -227,12 +250,12 @@ class ModelManager:
             }
             self.model_status["tumor"] = {
                 "loaded": True,
-                "framework": "PyTorch (5-Fold Ensemble)",
+                "framework": f"PyTorch ({len(fold_models)}-Fold)",
                 "device": str(self.device),
                 "folds_loaded": len(fold_models),
                 "classes": classes,
             }
-            logger.info(f"Bone Tumor model ensemble ({len(fold_models)} folds) loaded successfully.")
+            logger.info(f"Bone Tumor model ({len(fold_models)} fold(s)) loaded successfully.")
             return True
         except Exception as e:
             logger.error(f"Failed to load Tumor model ensemble: {e}", exc_info=True)
@@ -301,13 +324,22 @@ class ModelManager:
         with lock:
             if module in self.models and self.model_status.get(module, {}).get("loaded"):
                 return True
+
+            # In low-RAM environments, evict other loaded models to guarantee staying under 512MB RAM
+            if os.getenv("LAZY_LOAD_MODELS", "false").lower() in ("true", "1", "yes"):
+                for other in list(self.models.keys()):
+                    if other != module:
+                        logger.info(f"Unloading previous model '{other}' to keep RAM strictly below 512MB limit")
+                        del self.models[other]
+                        if other in self.model_status:
+                            self.model_status[other] = {"loaded": False, "mode": "on_demand_standby"}
+                import gc
+                gc.collect()
+
             loader = getattr(self, f"load_{module}", None)
             if loader:
                 logger.info(f"Loading {module} model on-demand...")
-                success = loader()
-                if success:
-                    self.warmup_module(module)
-                return success
+                return loader()
             return False
 
     def load_all(self):

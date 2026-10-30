@@ -1173,11 +1173,15 @@ function AnalysisProgress({
         await new Promise((resolve) => setTimeout(resolve, 400))
         if (isCancelled) return
 
-        // 2. Poll GET /api/jobs/{id} every 700ms
+        // 2. Poll GET /api/jobs/{id} every 800ms with transient error tolerance
+        let consecutiveFailures = 0
+        const MAX_CONSECUTIVE_FAILURES = 10
+
         pollInterval = setInterval(async () => {
           try {
             const jobData = await api.getJobStatus(jobId)
             if (isCancelled) return
+            consecutiveFailures = 0
 
             if (jobData.status === "analyzing") {
               // Step 3: Model analyzing
@@ -1201,11 +1205,14 @@ function AnalysisProgress({
               setErrorMessage(jobData.error || "Model analysis failed. Please verify the image and try again.")
             }
           } catch (pollErr: any) {
-            console.error("Polling error:", pollErr)
-            clearInterval(pollInterval)
-            setErrorMessage("Failed to check analysis progress. The server may be unreachable.")
+            console.warn("Polling retryable error:", pollErr)
+            consecutiveFailures++
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+              clearInterval(pollInterval)
+              setErrorMessage("Failed to check analysis progress. The server may be unreachable.")
+            }
           }
-        }, 700)
+        }, 800)
 
       } catch (err: any) {
         if (isCancelled) return

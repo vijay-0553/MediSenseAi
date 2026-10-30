@@ -1,6 +1,7 @@
 import concurrent.futures
 from datetime import datetime, timezone
 import logging
+import os
 from pathlib import Path
 import time
 from typing import Any, Dict, List, Optional
@@ -21,10 +22,11 @@ class JobManager:
     Asynchronous job manager executing model inference and PDF report generation
     in background worker threads, freeing the FastAPI async event loop.
     """
-    def __init__(self, max_workers: int = 4):
+    def __init__(self, max_workers: int = 2):
         self.jobs: Dict[str, Dict[str, Any]] = {}
+        worker_count = 1 if os.getenv("LAZY_LOAD_MODELS", "false").lower() in ("true", "1", "yes") else max_workers
         self.executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=max_workers,
+            max_workers=worker_count,
             thread_name_prefix="medisense-job-worker"
         )
 
