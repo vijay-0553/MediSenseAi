@@ -16,14 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Upgrade pip and install CPU-optimized PyTorch first (efficient container caching)
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Pre-install PyTorch dependencies from PyPI so pip doesn't hang searching pytorch.org
+RUN pip install --no-cache-dir filelock typing-extensions sympy networkx jinja2 fsspec pillow numpy
 
-# Copy requirements and install dependencies
+# Install CPU-optimized PyTorch and torchvision using --extra-index-url
+RUN pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Copy and install application requirements
 COPY requirements.txt .
-RUN grep -v "torch" requirements.txt > req_no_torch.txt && \
-    pip install --no-cache-dir -r req_no_torch.txt || pip install --no-cache-dir fastapi "uvicorn[standard]" python-multipart pydicom bcrypt pyjwt sqlalchemy pydantic reportlab pillow numpy tensorflow-cpu keras pymupdf
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source code and models
 COPY . .
