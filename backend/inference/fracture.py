@@ -22,7 +22,10 @@ def predict_fracture(image_bytes: bytes) -> Dict[str, Any]:
 
     batch = preprocess_fracture_image(image_bytes)
     with model_manager.locks["fracture"]:
-        raw_output = model.predict(batch, verbose=0)
+        if hasattr(model, "run"):
+            raw_output = model.run(None, {"xray": batch})[0]
+        else:
+            raw_output = model.predict(batch, verbose=0)
     p_fracture = float(raw_output[0, 0])
 
     inference_time_ms = round((time.perf_counter() - start_time) * 1000, 2)

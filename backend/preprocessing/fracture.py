@@ -1,22 +1,17 @@
+import io
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.applications.densenet import preprocess_input
+from PIL import Image
 
 IMG_SIZE = 224
 
 def preprocess_fracture_image(image_bytes: bytes) -> np.ndarray:
     """
-    Exact notebook implementation (bone-fracture-notebook.ipynb Cell 10 and 11):
-    1. tf.io.decode_image
-    2. tf.image.resize to [224, 224] (Bilinear)
-    3. tf.cast to float32
-    4. densenet.preprocess_input
-    5. expand_dims(axis=0)
+    Standard ImageNet-normalized tensor for DenseNet201.
+    Uses PIL & NumPy with zero TensorFlow overhead to maintain strict < 150MB RAM footprint.
     """
-    image = tf.io.decode_image(image_bytes, channels=3, expand_animations=False)
-    image.set_shape([None, None, 3])
-    image = tf.image.resize(image, [IMG_SIZE, IMG_SIZE])
-    image = tf.cast(image, tf.float32)
-    image = preprocess_input(image)
-    batch = tf.expand_dims(image, axis=0)
-    return batch.numpy()
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB").resize((IMG_SIZE, IMG_SIZE), Image.Resampling.BILINEAR)
+    arr = np.array(img, dtype=np.float32) / 255.0
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    norm = (arr - mean) / std
+    return np.expand_dims(norm, axis=0)

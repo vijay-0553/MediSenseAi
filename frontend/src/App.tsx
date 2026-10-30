@@ -1175,7 +1175,7 @@ function AnalysisProgress({
 
         // 2. Poll GET /api/jobs/{id} every 800ms with transient error tolerance
         let consecutiveFailures = 0
-        const MAX_CONSECUTIVE_FAILURES = 10
+        const MAX_CONSECUTIVE_FAILURES = 35
 
         pollInterval = setInterval(async () => {
           try {

@@ -18,6 +18,7 @@ MODELS_DIR = BASE_DIR / "models" / "models"
 GITHUB_CDN_BASE = "https://media.githubusercontent.com/media/vijay-0553/MediSenseAi/main/backend/models/models"
 
 REQUIRED_MODELS = [
+    "fracture/DenseNet201_CBAM_Final.onnx",
     "fracture/DenseNet201_CBAM_Final.keras",
     "spine/medisense_spine_densenet201_cbam.pth",
     "knee/MediSense_Knee_EfficientNetB5_CleanLab_Final.pth",

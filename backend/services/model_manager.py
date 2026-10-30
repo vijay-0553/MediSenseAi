@@ -52,34 +52,52 @@ class ModelManager:
         self.metadata: Dict[str, Any] = {}
 
     def load_fracture(self) -> bool:
-        path = self.paths["fracture"]
+        onnx_path = settings.MODELS_DIR / "fracture" / "DenseNet201_CBAM_Final.onnx"
+        keras_path = self.paths["fracture"]
         try:
-            if not path.exists():
-                raise FileNotFoundError(f"Model file not found: {path}")
-            logger.info(f"Loading Fracture model from {path}...")
-            import tensorflow as tf
-            from architectures.cbam_keras import CBAM as KerasCBAM
-            model = tf.keras.models.load_model(
-                str(path),
-                custom_objects={"CBAM": KerasCBAM},
-                compile=False
-            )
-            self.models["fracture"] = model
-            self.model_status["fracture"] = {
-                "loaded": True,
-                "framework": "TensorFlow/Keras",
-                "format": "Keras 3 (.keras)",
-                "device": "CPU",
-                "path": str(path.name),
-            }
-            logger.info("Fracture model loaded successfully.")
-            return True
+            if onnx_path.exists() and onnx_path.stat().st_size > 2048:
+                logger.info(f"Loading Fracture model via ultra-lightweight ONNX Runtime from {onnx_path}...")
+                import onnxruntime as ort
+                opts = ort.SessionOptions()
+                opts.intra_op_num_threads = 1
+                opts.inter_op_num_threads = 1
+                sess = ort.InferenceSession(str(onnx_path), sess_options=opts, providers=["CPUExecutionProvider"])
+                self.models["fracture"] = sess
+                self.model_status["fracture"] = {
+                    "loaded": True,
+                    "framework": "ONNX Runtime (RAM-optimized)",
+                    "device": "CPU",
+                    "path": str(onnx_path.name),
+                }
+                logger.info("Fracture model loaded successfully via ONNX Runtime.")
+                return True
+            elif keras_path.exists():
+                logger.info(f"Loading Fracture model from {keras_path} (fallback Keras)...")
+                import tensorflow as tf
+                from architectures.cbam_keras import CBAM as KerasCBAM
+                model = tf.keras.models.load_model(
+                    str(keras_path),
+                    custom_objects={"CBAM": KerasCBAM},
+                    compile=False
+                )
+                self.models["fracture"] = model
+                self.model_status["fracture"] = {
+                    "loaded": True,
+                    "framework": "TensorFlow/Keras",
+                    "format": "Keras 3 (.keras)",
+                    "device": "CPU",
+                    "path": str(keras_path.name),
+                }
+                logger.info("Fracture fallback model loaded successfully.")
+                return True
+            else:
+                raise FileNotFoundError(f"Model file not found: checked {onnx_path} and {keras_path}")
         except Exception as e:
             logger.error(f"Failed to load Fracture model: {e}", exc_info=True)
             self.model_status["fracture"] = {
                 "loaded": False,
                 "error": str(e),
-                "path": str(path.name),
+                "path": str(onnx_path.name if onnx_path.exists() else keras_path.name),
             }
             return False
 
@@ -274,8 +292,12 @@ class ModelManager:
         try:
             if "fracture" in self.models:
                 with self.locks["fracture"]:
-                    dummy_tf = np.zeros((1, 224, 224, 3), dtype=np.float32)
-                    self.models["fracture"].predict(dummy_tf, verbose=0)
+                    m = self.models["fracture"]
+                    dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
+                    if hasattr(m, "run"):
+                        m.run(None, {"xray": dummy})
+                    else:
+                        m.predict(dummy, verbose=0)
             
             with torch.inference_mode():
                 dummy_224 = torch.zeros((1, 3, 224, 224), device=self.device)
@@ -302,8 +324,12 @@ class ModelManager:
         try:
             if module == "fracture" and "fracture" in self.models:
                 with self.locks["fracture"]:
-                    dummy_tf = np.zeros((1, 224, 224, 3), dtype=np.float32)
-                    self.models["fracture"].predict(dummy_tf, verbose=0)
+                    m = self.models["fracture"]
+                    dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
+                    if hasattr(m, "run"):
+                        m.run(None, {"xray": dummy})
+                    else:
+                        m.predict(dummy, verbose=0)
             elif module == "tumor" and "tumor" in self.models:
                 dummy_384 = torch.zeros((1, 3, 384, 384), device=self.device)
                 with torch.inference_mode(), self.locks["tumor"]:
