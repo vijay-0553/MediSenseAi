@@ -276,6 +276,12 @@ class ModelManager:
     def load_all(self):
         """Loads all 9 checkpoints into memory and runs warmup."""
         logger.info("=== Loading all 9 MediSense checkpoints ===")
+        try:
+            from ensure_models import ensure_all_models
+            ensure_all_models()
+        except Exception as e:
+            logger.warning(f"Automatic model verification note: {e}")
+
         self.load_fracture()
         self.load_spine()
         self.load_knee()

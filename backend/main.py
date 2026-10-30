@@ -90,6 +90,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -148,8 +149,18 @@ def user_to_response(user: User) -> UserResponse:
 
 
 # -------------------------------------------------------------
-# 1. Health Endpoint
+# 1. Health & Root Endpoints
 # -------------------------------------------------------------
+@app.get("/")
+async def root() -> Dict[str, Any]:
+    return {
+        "service": "MediSense AI Backend",
+        "status": "online",
+        "docs": "/docs",
+        "health": "/api/health",
+        "version": "1.0.0",
+    }
+
 @app.get("/api/health")
 async def health_check() -> Dict[str, Any]:
     """

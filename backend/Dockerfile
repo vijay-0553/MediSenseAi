@@ -28,6 +28,9 @@ RUN grep -v "torch" requirements.txt > req_no_torch.txt && \
 # Copy application source code and models
 COPY . .
 
+# Verify neural network checkpoints and resolve Git LFS pointers if needed
+RUN python ensure_models.py
+
 # Expose port
 EXPOSE 8000
 
