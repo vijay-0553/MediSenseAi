@@ -24,6 +24,8 @@ def predict_knee(image_bytes: bytes) -> Dict[str, Any]:
     - probabilities: {class_name: prob}
     """
     if "knee" not in model_manager.models:
+        model_manager.ensure_loaded("knee")
+    if "knee" not in model_manager.models:
         raise RuntimeError("Knee model is not loaded: " + str(model_manager.model_status.get("knee", {}).get("error", "Unknown error")))
 
     model = model_manager.models["knee"]

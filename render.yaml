@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: medisense-ai-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LAZY_LOAD_MODELS
+        value: "true"
+      - key: DATABASE_URL
+        value: sqlite:///./medisense.db
+      - key: REPORT_TTL_HOURS
+        value: "24"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "25"

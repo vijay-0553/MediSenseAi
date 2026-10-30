@@ -20,6 +20,8 @@ def predict_tumor(image_bytes: bytes, bbox=None) -> Dict[str, Any]:
     - roi_box: Optional bounding box
     """
     if "tumor" not in model_manager.models:
+        model_manager.ensure_loaded("tumor")
+    if "tumor" not in model_manager.models:
         raise RuntimeError("Tumor model ensemble is not loaded: " + str(model_manager.model_status.get("tumor", {}).get("error", "Unknown error")))
 
     fold_models: List[torch.nn.Module] = model_manager.models["tumor"]

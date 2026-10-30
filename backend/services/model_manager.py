@@ -273,14 +273,58 @@ class ModelManager:
         except Exception as e:
             logger.warning(f"Model warmup encountered a non-fatal error: {e}")
 
+    def warmup_module(self, module: str):
+        """Runs dummy forward pass for a single module."""
+        try:
+            if module == "fracture" and "fracture" in self.models:
+                with self.locks["fracture"]:
+                    dummy_tf = np.zeros((1, 224, 224, 3), dtype=np.float32)
+                    self.models["fracture"].predict(dummy_tf, verbose=0)
+            elif module == "tumor" and "tumor" in self.models:
+                dummy_384 = torch.zeros((1, 3, 384, 384), device=self.device)
+                with torch.inference_mode(), self.locks["tumor"]:
+                    for m in self.models["tumor"]:
+                        m(dummy_384)
+            elif module in self.models:
+                dummy_224 = torch.zeros((1, 3, 224, 224), device=self.device)
+                with torch.inference_mode(), self.locks[module]:
+                    self.models[module](dummy_224)
+        except Exception as e:
+            logger.warning(f"Warmup for {module} had note: {e}")
+
+    def ensure_loaded(self, module: str) -> bool:
+        """Loads a specific model module on-demand if not already in memory."""
+        if module in self.models and self.model_status.get(module, {}).get("loaded"):
+            return True
+        lock = self.locks.get(module, threading.Lock())
+        with lock:
+            if module in self.models and self.model_status.get(module, {}).get("loaded"):
+                return True
+            loader = getattr(self, f"load_{module}", None)
+            if loader:
+                logger.info(f"Loading {module} model on-demand...")
+                success = loader()
+                if success:
+                    self.warmup_module(module)
+                return success
+            return False
+
     def load_all(self):
-        """Loads all 9 checkpoints into memory and runs warmup."""
-        logger.info("=== Loading all 9 MediSense checkpoints ===")
+        """Loads all checkpoints into memory, or prepares on-demand loaders if LAZY_LOAD_MODELS=true."""
+        logger.info("=== Loading MediSense checkpoints ===")
         try:
             from ensure_models import ensure_all_models
             ensure_all_models()
         except Exception as e:
             logger.warning(f"Automatic model verification note: {e}")
+
+        lazy_mode = os.getenv("LAZY_LOAD_MODELS", "false").lower() in ("true", "1", "yes")
+        if lazy_mode:
+            logger.info("LAZY_LOAD_MODELS=true enabled: models will be loaded on-demand to conserve RAM on Render.")
+            for mod in ["fracture", "spine", "knee", "chest", "tumor"]:
+                if mod not in self.model_status:
+                    self.model_status[mod] = {"loaded": False, "mode": "on_demand_standby"}
+            return
 
         self.load_fracture()
         self.load_spine()
@@ -291,9 +335,16 @@ class ModelManager:
         logger.info("=== Model loading and warmup sequence completed ===")
 
     def get_status(self) -> Dict[str, Any]:
+        all_modules = ["fracture", "spine", "knee", "chest", "tumor"]
+        module_info = {}
+        for mod in all_modules:
+            if mod in self.model_status:
+                module_info[mod] = self.model_status[mod]
+            else:
+                module_info[mod] = {"loaded": False, "mode": "on_demand_standby"}
         return {
             "device": str(self.device),
-            "modules": self.model_status,
+            "modules": module_info,
         }
 
 model_manager = ModelManager()

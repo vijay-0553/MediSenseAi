@@ -14,6 +14,8 @@ def predict_chest(image_bytes: bytes, threshold: float = 0.50) -> Dict[str, Any]
     - interpretation_note: neutral clinical summary
     """
     if "chest" not in model_manager.models:
+        model_manager.ensure_loaded("chest")
+    if "chest" not in model_manager.models:
         raise RuntimeError("Chest model is not loaded: " + str(model_manager.model_status.get("chest", {}).get("error", "Unknown error")))
 
     model = model_manager.models["chest"]

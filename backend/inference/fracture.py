@@ -13,6 +13,8 @@ def predict_fracture(image_bytes: bytes) -> Dict[str, Any]:
     - low_confidence: bool (true when top probability < 0.50)
     """
     if "fracture" not in model_manager.models:
+        model_manager.ensure_loaded("fracture")
+    if "fracture" not in model_manager.models:
         raise RuntimeError("Fracture model is not loaded: " + str(model_manager.model_status.get("fracture", {}).get("error", "Unknown error")))
 
     model = model_manager.models["fracture"]

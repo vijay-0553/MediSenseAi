@@ -16,6 +16,8 @@ def predict_spine(image_bytes: bytes, filename: str = "") -> Dict[str, Any]:
     - interpretation_note: neutral clinical explanation
     """
     if "spine" not in model_manager.models:
+        model_manager.ensure_loaded("spine")
+    if "spine" not in model_manager.models:
         raise RuntimeError("Spine model is not loaded: " + str(model_manager.model_status.get("spine", {}).get("error", "Unknown error")))
 
     model = model_manager.models["spine"]
