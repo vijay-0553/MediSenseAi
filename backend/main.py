@@ -151,7 +151,7 @@ def user_to_response(user: User) -> UserResponse:
 # -------------------------------------------------------------
 # 1. Health & Root Endpoints
 # -------------------------------------------------------------
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root() -> Dict[str, Any]:
     return {
         "service": "MediSense AI Backend",
@@ -161,7 +161,7 @@ async def root() -> Dict[str, Any]:
         "version": "1.0.0",
     }
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check() -> Dict[str, Any]:
     """
     Returns real per-model status (loaded / failed + reason) and server environment.
